@@ -1,14 +1,16 @@
-# app.py — FastAPI: Prediksi murni model ML dengan API-Key header (hardcoded)
+# app.py — FastAPI: Prediksi murni model ML + endpoint test private/public
 import os
 import joblib
 import pandas as pd
 from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 # ====== Konfigurasi ======
-API_KEY = "a3c9f9c09c8e4b78a5fdf402d77b92de" 
+API_KEY = "a3c9f9c09c8e4b78a5fdf402d77b92de"
 
 MODEL_DIR = os.getenv("MODEL_DIR", "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "svm_haz_pmk.pkl")
@@ -105,10 +107,28 @@ def _predict_df(df: pd.DataFrame):
             probs = None
     return y_idx, labels, probs
 
+def _status_payload(desc: str) -> Dict[str, Any]:
+    return {
+        "status": "ok",
+        "message": "Server is running",
+        "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "desc": desc,  # "Private" atau "Public"
+    }
+
 # ====== Endpoints ======
 @app.get("/health")
 def health():
     return {"status": "ok", "classes": CLASSES}
+
+# --- Test status (tanpa API key) ---
+@app.get("/public")
+def public_status():
+    return _status_payload("Public")
+
+# --- Test status (dengan API key) ---
+@app.get("/private", dependencies=[Depends(verify_api_key)])
+def private_status():
+    return _status_payload("Private")
 
 @app.post("/predict", dependencies=[Depends(verify_api_key)])
 def predict_only(item: Sample):
