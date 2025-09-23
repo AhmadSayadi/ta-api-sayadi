@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_validator
 # ====== Konfigurasi ======
 API_KEY = "a3c9f9c09c8e4b78a5fdf402d77b92de"
 
-MODEL_DIR = os.getenv("MODEL_DIR", "models")
+MODEL_DIR = os.getenv("MODEL_DIR", "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "svm_haz_pmk.pkl")
 ENC_PATH   = os.path.join(MODEL_DIR, "label_encoder.pkl")
 
@@ -129,6 +129,101 @@ def public_status():
 @app.get("/private", dependencies=[Depends(verify_api_key)])
 def private_status():
     return _status_payload("Private")
+
+@app.get("/model")
+def model_info():
+    """Endpoint untuk menampilkan informasi model ML"""
+    try:
+        # Ambil informasi dari model yang sudah dimuat
+        model_type = type(model).__name__
+        
+        # Cek apakah model memiliki atribut tertentu
+        model_params = {}
+        if hasattr(model, 'get_params'):
+            model_params = model.get_params()
+        
+        # Ambil informasi kernel jika SVM
+        kernel_info = "Unknown"
+        if hasattr(model, 'kernel'):
+            kernel_info = model.kernel
+        
+        # Ambil feature names jika ada
+        feature_names = ["usia_bulan", "jk_bin", "tinggi_cm", "berat_kg"]
+        if hasattr(model, 'feature_names_in_'):
+            feature_names = list(model.feature_names_in_)
+        
+        # Ambil jumlah support vectors jika SVM
+        n_support = None
+        if hasattr(model, 'n_support_'):
+            n_support = model.n_support_.tolist() if hasattr(model.n_support_, 'tolist') else list(model.n_support_)
+        
+        return {
+            "model_name": "SVM HAZ PMK",
+            "model_type": model_type,
+            "classes": CLASSES,
+            "n_classes": len(CLASSES),
+            "model_parameters": {
+                "kernel": kernel_info,
+                "n_support_vectors": n_support,
+                "total_support_vectors": sum(n_support) if n_support else None,
+                "other_params": {k: str(v) for k, v in model_params.items() if k not in ['kernel']}
+            },
+            "model_features": feature_names,
+            "model_info": {
+                "algorithm": f"{model_type}",
+                "encoder_classes": list(encoder.classes_) if hasattr(encoder, 'classes_') else None,
+                "model_file": MODEL_PATH,
+                "encoder_file": ENC_PATH
+            },
+            "note": "Untuk informasi performance metrics dan confusion matrix, lihat endpoint /performance-metrics"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting model info: {str(e)}")
+
+@app.get("/performance-metrics")
+async def performance_metrics():
+    """Get model performance metrics"""
+    try:
+        return {
+            "evaluation_metrics": {
+                "precision": {
+                    "class_0": 0.66,
+                    "class_1": 0.79,
+                    "macro_avg": 0.72,
+                    "weighted_avg": 0.73
+                },
+                "recall": {
+                    "class_0": 0.78,
+                    "class_1": 0.67,
+                    "macro_avg": 0.72,
+                    "weighted_avg": 0.72
+                },
+                "f1_score": {
+                    "class_0": 0.71,
+                    "class_1": 0.72,
+                    "macro_avg": 0.72,
+                    "weighted_avg": 0.72
+                },
+                "support": {
+                    "class_0": 27,
+                    "class_1": 33,
+                    "total": 60
+                }
+            },
+            "confusion_matrix": {
+                "matrix": [[21, 6], [11, 22]],
+                "labels": ["class_0", "class_1"],
+                "description": "Confusion Matrix (Actual vs Predicted)",
+                "interpretation": {
+                    "true_negatives": 21,
+                    "false_positives": 6,
+                    "false_negatives": 11,
+                    "true_positives": 22
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting performance metrics: {str(e)}")
 
 @app.post("/predict", dependencies=[Depends(verify_api_key)])
 def predict_only(item: Sample):

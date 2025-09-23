@@ -1,11 +1,15 @@
 services:
   - type: web
-    name: stunting-ml-api
+    name: ta-api-sayadi
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     autoDeploy: true
     envVars:
       - key: MODEL_DIR
-        value: models
+        value: model
+      - key: PYTHONPATH
+        value: .
+      - key: API_KEY
+        value: your-secret-api-key

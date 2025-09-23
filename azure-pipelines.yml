@@ -1,0 +1,76 @@
+# Azure DevOps Pipeline for FastAPI deployment
+trigger:
+- main
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  pythonVersion: '3.13'
+  webAppName: 'ta-api-sayadi'
+  resourceGroupName: 'rg-ta-api-sayadi'
+  subscriptionId: 'your-subscription-id'
+
+stages:
+- stage: Build
+  displayName: 'Build stage'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build'
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      displayName: 'Install dependencies'
+
+    - script: |
+        # Run tests if you have any
+        # python -m pytest tests/
+        echo "No tests configured yet"
+      displayName: 'Run tests'
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive files'
+      inputs:
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+        replaceExistingArchive: true
+
+    - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+      artifact: drop
+
+- stage: Deploy
+  displayName: 'Deploy stage'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeploymentJob
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python version'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy Azure Web App'
+            inputs:
+              azureSubscription: 'your-service-connection-name'
+              appType: 'webAppLinux'
+              appName: '$(webAppName)'
+              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+              runtimeStack: 'PYTHON|3.13'
+              startUpCommand: 'uvicorn main:app --host 0.0.0.0 --port 8000'
