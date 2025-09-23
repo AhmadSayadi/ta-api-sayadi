@@ -145,6 +145,25 @@ def _status_payload(desc: str) -> Dict[str, Any]:
     }
 
 # ====== Endpoints ======
+@app.get("/")
+def root():
+    """Root endpoint untuk menampilkan status server"""
+    return {
+        "status": "ok",
+        "message": "TA API Sayadi - Server is running",
+        "version": "1.0.0",
+        "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "endpoints": {
+            "/health": "Health check endpoint",
+            "/model": "Model information",
+            "/performance-metrics": "Model performance metrics",
+            "/predict": "Single prediction (requires API key)",
+            "/predict-batch": "Batch prediction (requires API key)",
+            "/public": "Public status endpoint",
+            "/private": "Private status endpoint (requires API key)"
+        },
+    }
+
 @app.get("/health")
 def health():
     return {"status": "ok", "classes": CLASSES}
