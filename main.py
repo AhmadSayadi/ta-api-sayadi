@@ -53,6 +53,33 @@ class Sample(BaseModel):
     tinggi_cm: float
     berat_kg: float
 
+    @field_validator("usia_bulan")
+    @classmethod
+    def _validate_usia_bulan(cls, v):
+        if v is None or v == 0:
+            raise ValueError("usia_bulan tidak boleh kosong atau 0")
+        if v < 0:
+            raise ValueError("usia_bulan harus bernilai positif")
+        return v
+
+    @field_validator("tinggi_cm")
+    @classmethod
+    def _validate_tinggi_cm(cls, v):
+        if v is None or v == 0:
+            raise ValueError("tinggi_cm tidak boleh kosong atau 0")
+        if v < 0:
+            raise ValueError("tinggi_cm harus bernilai positif")
+        return v
+
+    @field_validator("berat_kg")
+    @classmethod
+    def _validate_berat_kg(cls, v):
+        if v is None or v == 0:
+            raise ValueError("berat_kg tidak boleh kosong atau 0")
+        if v < 0:
+            raise ValueError("berat_kg harus bernilai positif")
+        return v
+
     @field_validator("jk_bin")
     @classmethod
     def _valid_jk_bin(cls, v):
@@ -66,6 +93,8 @@ class Sample(BaseModel):
         if v is None:
             return v
         s = str(v).strip().lower()
+        if not s:  # Validasi string kosong
+            raise ValueError("jenis_kelamin tidak boleh kosong")
         mapping = {
             "laki-laki": "laki-laki",
             "laki laki": "laki-laki",
@@ -228,6 +257,16 @@ async def performance_metrics():
 @app.post("/predict", dependencies=[Depends(verify_api_key)])
 def predict_only(item: Sample):
     try:
+        # Validasi tambahan untuk memastikan semua field terisi
+        if item.usia_bulan is None or item.usia_bulan == 0:
+            raise ValueError("usia_bulan tidak boleh kosong atau 0")
+        if item.tinggi_cm is None or item.tinggi_cm == 0:
+            raise ValueError("tinggi_cm tidak boleh kosong atau 0")
+        if item.berat_kg is None or item.berat_kg == 0:
+            raise ValueError("berat_kg tidak boleh kosong atau 0")
+        if item.jk_bin is None and (item.jenis_kelamin is None or item.jenis_kelamin.strip() == ""):
+            raise ValueError("jk_bin atau jenis_kelamin harus diisi")
+            
         row = item.to_feature_row()
         X = pd.DataFrame([row])
         y_idx, labels, probs = _predict_df(X)
@@ -243,12 +282,25 @@ def predict_only(item: Sample):
                 "probabilities": probs[0] if probs else None
             }
         }
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=f"Validation error: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/predict-batch", dependencies=[Depends(verify_api_key)])
 def predict_batch(items: List[Sample]):
     try:
+        # Validasi setiap item dalam batch
+        for idx, item in enumerate(items):
+            if item.usia_bulan is None or item.usia_bulan == 0:
+                raise ValueError(f"Item {idx+1}: usia_bulan tidak boleh kosong atau 0")
+            if item.tinggi_cm is None or item.tinggi_cm == 0:
+                raise ValueError(f"Item {idx+1}: tinggi_cm tidak boleh kosong atau 0")
+            if item.berat_kg is None or item.berat_kg == 0:
+                raise ValueError(f"Item {idx+1}: berat_kg tidak boleh kosong atau 0")
+            if item.jk_bin is None and (item.jenis_kelamin is None or item.jenis_kelamin.strip() == ""):
+                raise ValueError(f"Item {idx+1}: jk_bin atau jenis_kelamin harus diisi")
+                
         rows = [it.to_feature_row() for it in items]
         X = pd.DataFrame(rows)
         y_idx, labels, probs = _predict_df(X)
@@ -264,5 +316,7 @@ def predict_batch(items: List[Sample]):
             "message": "Batch prediction success",
             "data": results
         }
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=f"Validation error: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
